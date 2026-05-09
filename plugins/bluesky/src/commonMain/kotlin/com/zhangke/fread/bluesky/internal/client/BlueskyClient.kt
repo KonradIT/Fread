@@ -58,6 +58,9 @@ import com.atproto.repo.GetRecordQueryParams
 import com.atproto.repo.GetRecordResponse
 import com.atproto.repo.PutRecordRequest
 import com.atproto.repo.PutRecordResponse
+import app.bsky.video.GetJobStatusResponse
+import app.bsky.video.JobStatus
+import app.bsky.video.UploadVideoResponse
 import com.atproto.repo.UploadBlobResponse
 import com.atproto.server.CreateSessionRequest
 import com.atproto.server.CreateSessionResponse
@@ -72,8 +75,24 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
+import io.ktor.http.contentType
+import io.ktor.http.isSuccess
+import io.ktor.http.takeFrom
+import io.ktor.http.content.OutgoingContent
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeFully
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonObject
+import okio.buffer
 import sh.christian.ozone.BlueskyApi
 import sh.christian.ozone.XrpcBlueskyApi
 import sh.christian.ozone.api.AtIdentifier
@@ -253,6 +272,87 @@ class BlueskyClient(
         return runCatching { uploadBlob(data) }.toResult()
     }
 
+    private val streamingHttpClient: HttpClient by lazy {
+        HttpClient(engine) {
+            install(Logging) { level = LogLevel.INFO }
+            expectSuccess = false
+        }
+    }
+
+    /**
+     * Streams a video upload to the Bluesky video service (video.bsky.app).
+     * The body is sent without buffering the file into memory: the supplied [sourceProvider]
+     * is invoked once writing begins and is closed after the channel finishes.
+     *
+     * [serviceAuthToken] must be obtained via com.atproto.server.getServiceAuth with
+     * `aud = did:web:video.bsky.app` and `lxm = app.bsky.video.uploadVideo`.
+     */
+    suspend fun uploadVideoStreamingCatching(
+        sourceProvider: suspend () -> okio.Source,
+        contentLength: Long,
+        mimeType: String,
+        did: String,
+        fileName: String,
+        serviceAuthToken: String,
+        onBytesUploaded: (suspend (Long, Long) -> Unit)? = null,
+    ): Result<UploadVideoResponse> = runCatching {
+        val response = streamingHttpClient.post {
+            url {
+                takeFrom("https://video.bsky.app/xrpc/app.bsky.video.uploadVideo")
+                parameters.append("did", did)
+                parameters.append("name", fileName)
+            }
+            header(HttpHeaders.Authorization, "Bearer $serviceAuthToken")
+            contentType(ContentType.parse(mimeType))
+            setBody(
+                StreamingBody(
+                    sourceProvider = sourceProvider,
+                    contentLength = contentLength,
+                    contentType = ContentType.parse(mimeType),
+                    onBytesUploaded = onBytesUploaded,
+                )
+            )
+        }
+        val text = response.bodyAsText()
+        // 409 with error=already_exists: the video has been processed before.
+        // The body is a flat JobStatus (no `jobStatus` wrapper) carrying the prior
+        // jobId. Reuse it — the caller's poll loop will resolve the blob via
+        // getJobStatus and skip the upload entirely.
+        if (response.status.value == 409) {
+            val flat = json.parseToJsonElement(text).jsonObject
+            val jobStatus = json.decodeFromJsonElement(JobStatus.serializer(), flat)
+            return@runCatching UploadVideoResponse(jobStatus = jobStatus)
+        }
+        if (!response.status.isSuccess()) {
+            throw RuntimeException("uploadVideo failed (${response.status.value}): $text")
+        }
+        json.decodeFromString(UploadVideoResponse.serializer(), text)
+    }
+
+    /**
+     * Polls transcode job status against the video service directly. The user's
+     * PDS does not implement `app.bsky.video.getJobStatus` (returns 501); this
+     * endpoint is hosted by `video.bsky.app` and authenticated with a service
+     * auth token signed by the user's PDS.
+     */
+    suspend fun getVideoJobStatusCatching(
+        jobId: String,
+        serviceAuthToken: String,
+    ): Result<GetJobStatusResponse> = runCatching {
+        val response = streamingHttpClient.get {
+            url {
+                takeFrom("https://video.bsky.app/xrpc/app.bsky.video.getJobStatus")
+                parameters.append("jobId", jobId)
+            }
+            header(HttpHeaders.Authorization, "Bearer $serviceAuthToken")
+        }
+        val text = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw RuntimeException("getJobStatus failed (${response.status.value}): $text")
+        }
+        json.decodeFromString(GetJobStatusResponse.serializer(), text)
+    }
+
     suspend fun applyWritesCatching(request: ApplyWritesRequest): Result<ApplyWritesResponse> {
         return runCatching { applyWrites(request) }.toResult()
     }
@@ -266,6 +366,27 @@ class BlueskyClient(
     private fun <T : Any> Result<AtpResponse<T>>.toResult(): Result<T> {
         if (this.isFailure) return Result.failure(this.exceptionOrThrow())
         return this.getOrThrow().toResult()
+    }
+}
+
+private class StreamingBody(
+    private val sourceProvider: suspend () -> okio.Source,
+    override val contentLength: Long,
+    override val contentType: ContentType,
+    private val onBytesUploaded: (suspend (Long, Long) -> Unit)? = null,
+) : OutgoingContent.WriteChannelContent() {
+    override suspend fun writeTo(channel: ByteWriteChannel) {
+        var written = 0L
+        sourceProvider().buffer().use { src ->
+            val chunk = ByteArray(64 * 1024)
+            while (true) {
+                val read = src.read(chunk, 0, chunk.size)
+                if (read == -1) break
+                channel.writeFully(chunk, 0, read)
+                written += read
+                onBytesUploaded?.invoke(written, contentLength)
+            }
+        }
     }
 }
 

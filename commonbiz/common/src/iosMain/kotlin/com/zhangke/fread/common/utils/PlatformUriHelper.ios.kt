@@ -11,6 +11,10 @@ actual class PlatformUriHelper () {
         TODO("Not yet implemented")
     }
 
+    actual suspend fun openSource(uri: PlatformUri): okio.Source? {
+        TODO("Not yet implemented")
+    }
+
     actual fun queryFileName(uri: PlatformUri): String? {
         TODO("Not yet implemented")
     }
