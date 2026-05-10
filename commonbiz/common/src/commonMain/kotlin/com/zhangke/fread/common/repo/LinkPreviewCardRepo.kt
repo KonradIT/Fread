@@ -11,13 +11,17 @@ class LinkPreviewCardRepo {
 
     private val urlToInfoMap = mutableMapOf<String, LinkPreviewInfo>()
 
-    suspend fun fetchPreviewInfo(url: String): Result<LinkPreviewInfo> {
-        urlToInfoMap[url]?.let { return Result.success(it) }
-        val html = sharedHttpClient.get { url { takeFrom(url) } }.body<String>()
-        val info = LinkPreviewUtils.fetchPreviewInfo(url, html) ?: return Result.failure(
-            IllegalStateException("Failed to fetch link preview info")
-        )
-        urlToInfoMap[url] = info
-        return Result.success(info)
+    suspend fun fetchPreviewInfo(url: String): Result<LinkPreviewInfo> = runCatching {
+        val normalizedUrl = if (url.startsWith("http://") || url.startsWith("https://")) {
+            url
+        } else {
+            "https://$url"
+        }
+        urlToInfoMap[normalizedUrl]?.let { return@runCatching it }
+        val html = sharedHttpClient.get { url { takeFrom(normalizedUrl) } }.body<String>()
+        val info = LinkPreviewUtils.fetchPreviewInfo(normalizedUrl, html)
+            ?: throw IllegalStateException("Failed to fetch link preview info")
+        urlToInfoMap[normalizedUrl] = info
+        info
     }
 }
