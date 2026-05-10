@@ -25,6 +25,8 @@ data class PublishPostUiState(
     val selectedLanguages: List<String>,
     val maxLanguageCount: Int,
     val publishing: Boolean,
+    val publishProgress: Float? = null,
+    val publishStageLabel: String? = null,
     val replyBlog: Blog?,
     val quoteBlog: Blog?,
     val list: List<StatusList>,

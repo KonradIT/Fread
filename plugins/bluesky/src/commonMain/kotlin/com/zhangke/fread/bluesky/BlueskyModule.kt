@@ -50,6 +50,7 @@ import com.zhangke.fread.bluesky.internal.usecase.UpdateProfileRecordUseCase
 import com.zhangke.fread.bluesky.internal.usecase.UpdateRelationshipUseCase
 import com.zhangke.fread.bluesky.internal.usecase.UploadBlobUseCase
 import com.zhangke.fread.bluesky.internal.usecase.UploadImageByImageUrlUseCase
+import com.zhangke.fread.bluesky.internal.usecase.UploadVideoUseCase
 import com.zhangke.fread.common.browser.BrowserInterceptor
 import com.zhangke.fread.status.IStatusProvider
 import com.zhangke.fread.status.model.PlatformLocator
@@ -108,6 +109,7 @@ val blueskyModule = module {
     factoryOf(::DeleteRecordUseCase)
     factoryOf(::PublishingPostUseCase)
     factoryOf(::UploadBlobUseCase)
+    factoryOf(::UploadVideoUseCase)
     factoryOf(::UnblockUserWithoutUriUseCase)
     factoryOf(::BskyStatusInteractiveUseCase)
     factoryOf(::UpdateProfileRecordUseCase)
