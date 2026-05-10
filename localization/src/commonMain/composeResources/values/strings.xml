@@ -285,4 +285,9 @@
     <string name="error_alt_text_server">The alt text provider returned an error.</string>
     <string name="error_alt_text_network">Network error while generating alt text.</string>
     <string name="error_alt_text_no_text">The alt text provider returned an empty response.</string>
+    <string name="threaded_view_menu_open">Open threaded view</string>
+    <string name="threaded_view_screen_title">Threaded view</string>
+    <string name="threaded_view_assembling">Assembling threaded view</string>
+    <string name="threaded_view_empty">No thread to display</string>
+    <string name="threaded_view_back">Back</string>
 </resources>
