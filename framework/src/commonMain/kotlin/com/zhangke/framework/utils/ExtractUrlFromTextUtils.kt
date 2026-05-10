@@ -8,10 +8,15 @@ object ExtractUrlFromTextUtils {
 
     private val trailingPunctuation = setOf('.', ',', '!', '?', ':', ';', '"', '\'', '”', '’')
     private val closingToOpeningBracket = mapOf(')' to '(', ']' to '[', '}' to '{')
+    private val mentionOrHashtagPrefixes = setOf('@', '#')
 
     fun extract(text: String): List<String> {
         if (text.isEmpty()) return emptyList()
         return urlRegex.findAll(text)
+            .filter { match ->
+                val precedingChar = text.getOrNull(match.range.first - 1)
+                precedingChar !in mentionOrHashtagPrefixes
+            }
             .mapNotNull { sanitize(it.value) }
             .toList()
     }
