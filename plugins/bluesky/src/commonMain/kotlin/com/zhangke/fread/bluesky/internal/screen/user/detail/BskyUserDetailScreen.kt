@@ -244,7 +244,7 @@ private fun UserDetailContent(
         topBarActions = {
             TopBarActions(
                 uiState = uiState,
-                asProfileTab = asProfileTab,
+                asProfileTab = false,
                 onBlockClick = onBlockClick,
                 onMuteClick = onMuteClick,
                 onSearchClick = onSearchClick,
