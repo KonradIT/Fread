@@ -11,6 +11,8 @@ import com.zhangke.framework.architect.json.globalJson
 import com.zhangke.framework.composable.LoadableState
 import com.zhangke.framework.composable.TextString
 import com.zhangke.framework.composable.emitTextMessageFromThrowable
+import com.zhangke.framework.composable.textOf
+import com.zhangke.fread.localization.LocalizedString
 import com.zhangke.framework.ktx.launchInViewModel
 import com.zhangke.framework.utils.ContentProviderFile
 import com.zhangke.framework.utils.ExtractUrlFromTextUtils
@@ -68,6 +70,10 @@ class PublishPostViewModel(
     private var publishJob: Job? = null
 
     private val mentionedUsers = mutableSetOf<ProfileView>()
+
+    private companion object {
+        private const val MAX_VIDEO_BYTES = 100L * 1024 * 1024
+    }
 
     private var extractLinkPreviewCardJob: Job? = null
 
@@ -213,8 +219,13 @@ class PublishPostViewModel(
             val fileList = medias.map {
                 async { platformUriHelper.read(it) }
             }.awaitAll().filterNotNull()
-            val attachment = if (fileList.first().isVideo) {
-                PublishPostMediaAttachment.Video(fileList.first().toUiFile(true))
+            val first = fileList.firstOrNull() ?: return@launch
+            if (first.isVideo && first.size.bytes > MAX_VIDEO_BYTES) {
+                _snackBarMessageFlow.emit(textOf(LocalizedString.error_video_too_large))
+                return@launch
+            }
+            val attachment = if (first.isVideo) {
+                PublishPostMediaAttachment.Video(first.toUiFile(true))
             } else {
                 PublishPostMediaAttachment.Image(fileList.map { it.toUiFile(false) })
             }
@@ -287,7 +298,9 @@ class PublishPostViewModel(
             return
         }
         publishJob = launchInViewModel {
-            _uiState.update { it.copy(publishing = true) }
+            _uiState.update {
+                it.copy(publishing = true, publishProgress = null, publishStageLabel = null)
+            }
             publishingPost(
                 account = account,
                 content = uiState.value.content.text,
@@ -298,11 +311,34 @@ class PublishPostViewModel(
                 attachment = uiState.value.attachment,
                 mentionedUsers = mentionedUsers,
                 linkPreviewInfo = (uiState.value.detectedLinkCard as? DetectedLinkCard.Loaded)?.info,
+                onUploadStage = { stage ->
+                    when (stage) {
+                        is com.zhangke.fread.bluesky.internal.usecase.UploadStage.Uploading ->
+                            _uiState.update {
+                                it.copy(
+                                    publishProgress = stage.fraction.coerceIn(0f, 1f),
+                                    publishStageLabel = "${(stage.fraction * 100).toInt()}%",
+                                )
+                            }
+                        is com.zhangke.fread.bluesky.internal.usecase.UploadStage.Transcoding ->
+                            _uiState.update {
+                                it.copy(
+                                    publishProgress = stage.percent?.let { p -> p / 100f },
+                                    publishStageLabel = stage.label +
+                                        (stage.percent?.let { " $it%" } ?: ""),
+                                )
+                            }
+                    }
+                },
             ).onFailure { t ->
-                _uiState.update { it.copy(publishing = false) }
+                _uiState.update {
+                    it.copy(publishing = false, publishProgress = null, publishStageLabel = null)
+                }
                 _snackBarMessageFlow.emitTextMessageFromThrowable(t)
             }.onSuccess {
-                _uiState.update { it.copy(publishing = false) }
+                _uiState.update {
+                    it.copy(publishing = false, publishProgress = null, publishStageLabel = null)
+                }
                 _finishPageFlow.emit(Unit)
             }
         }

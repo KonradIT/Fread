@@ -8,6 +8,7 @@ import com.zhangke.framework.utils.toContentProviderFile
 import com.zhangke.fread.common.di.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okio.source
 
 actual class PlatformUriHelper (
     private val context: ApplicationContext,
@@ -23,6 +24,13 @@ actual class PlatformUriHelper (
         return context.contentResolver.openInputStream(uri.toAndroidUri())?.use {
             it.readBytes()
         }
+    }
+
+    actual suspend fun openSource(uri: PlatformUri): okio.Source? {
+        val stream = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri.toAndroidUri())
+        } ?: return null
+        return stream.source()
     }
 
     actual fun queryFileName(uri: PlatformUri): String? {

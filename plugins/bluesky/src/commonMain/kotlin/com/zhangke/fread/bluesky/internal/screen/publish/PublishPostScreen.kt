@@ -103,6 +103,8 @@ private fun PublishPostContent(
         publishEnabled = uiState.publishEnabled,
         showAddAccountIcon = uiState.showAddAccountIcon,
         publishing = uiState.publishing,
+        publishProgress = uiState.publishProgress,
+        publishStageLabel = uiState.publishStageLabel,
         replyingBlog = uiState.replyBlog,
         onContentChanged = onContentChanged,
         onPublishClick = onPublishClick,

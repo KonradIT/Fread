@@ -65,6 +65,8 @@ fun PublishPostScaffold(
     showAddAccountIcon: Boolean,
     publishEnabled: Boolean,
     publishing: Boolean,
+    publishProgress: Float? = null,
+    publishStageLabel: String? = null,
     replyingBlog: Blog? = null,
     onContentChanged: (TextFieldValue) -> Unit,
     onPublishClick: () -> Unit,
@@ -90,6 +92,8 @@ fun PublishPostScaffold(
         topBar = {
             PublishTopBar(
                 publishing = publishing,
+                progress = publishProgress,
+                progressLabel = publishStageLabel,
                 onBackClick = onBackClick,
                 publishEnabled = publishEnabled,
                 onPublishClick = onPublishClick,

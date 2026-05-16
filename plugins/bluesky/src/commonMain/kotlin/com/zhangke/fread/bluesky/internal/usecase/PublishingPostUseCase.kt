@@ -70,6 +70,7 @@ class PublishingPostUseCase(
     private val clientManager: BlueskyClientManager,
     private val uploadImageByImageUrl: UploadImageByImageUrlUseCase,
     private val uploadBlob: UploadBlobUseCase,
+    private val uploadVideoUseCase: UploadVideoUseCase,
 ) {
 
     suspend operator fun invoke(
@@ -82,11 +83,12 @@ class PublishingPostUseCase(
         quoteBlog: Blog? = null,
         mentionedUsers: Set<ProfileView> = emptySet(),
         linkPreviewInfo: LinkPreviewInfo? = null,
+        onUploadStage: (suspend (UploadStage) -> Unit)? = null,
     ): Result<Unit> {
         val client = clientManager.getClient(account.locator)
         val rkey = Tid.generateTID()
         val postUri = "at://${account.did}/${BskyCollections.feedPost.nsid}/$rkey"
-        val embedResult = buildPostEmbed(account.locator, attachment, quoteBlog, linkPreviewInfo)
+        val embedResult = buildPostEmbed(account, attachment, quoteBlog, linkPreviewInfo, onUploadStage)
         if (embedResult.isFailure) return Result.failure(embedResult.exceptionOrNull()!!)
         val replyResult = buildReplyRef(account.locator, replyBlog)
         if (replyResult.isFailure) return Result.failure(replyResult.exceptionOrNull()!!)
@@ -149,13 +151,15 @@ class PublishingPostUseCase(
     }
 
     private suspend fun buildPostEmbed(
-        locator: PlatformLocator,
+        account: BlueskyLoggedAccount,
         attachment: PublishPostMediaAttachment?,
         quoteBlog: Blog?,
         linkPreviewInfo: LinkPreviewInfo?,
+        onUploadStage: (suspend (UploadStage) -> Unit)?,
     ): Result<PostEmbedUnion?> {
+        val locator = account.locator
         val videoResult =
-            (attachment as? PublishPostMediaAttachment.Video)?.let { uploadVideo(locator, it.file) }
+            (attachment as? PublishPostMediaAttachment.Video)?.let { uploadVideo(account, it.file, onUploadStage) }
         if (videoResult?.isFailure == true) return Result.failure(videoResult.exceptionOrNull()!!)
         val imagesResult =
             (attachment as? PublishPostMediaAttachment.Image)?.let { uploadImages(locator, it) }
@@ -207,10 +211,11 @@ class PublishingPostUseCase(
     }
 
     private suspend fun uploadVideo(
-        locator: PlatformLocator,
+        account: BlueskyLoggedAccount,
         file: PublishPostMediaAttachmentFile,
+        onStage: (suspend (UploadStage) -> Unit)?,
     ): Result<Video> {
-        return uploadBlob(locator = locator, fileUri = file.file.uri)
+        return uploadVideoUseCase(account = account, fileUri = file.file.uri, onStage = onStage)
             .map {
                 Video(
                     video = it.first,

@@ -473,6 +473,11 @@ object LocalizedString {
         localizedString.post_status_poll_style_select_dialog_title
     val post_status_poll_is_empty = localizedString.post_status_poll_is_empty
     val post_status_media_is_not_upload = localizedString.post_status_media_is_not_upload
+    val error_video_too_large = localizedString.error_video_too_large
+    val error_video_load_failed = localizedString.error_video_load_failed
+    val error_video_upload_failed = localizedString.error_video_upload_failed
+    val error_video_transcode_failed = localizedString.error_video_transcode_failed
+    val error_video_transcode_timeout = localizedString.error_video_transcode_timeout
 
     val add_instance_screen_title = localizedString.add_instance_screen_title
     val add_instance_input_service_hint = localizedString.add_instance_input_service_hint
